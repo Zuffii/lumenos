@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lumenOS</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --text: #f5f5f7;
+    --accent: #30d158;
+  }
+
+  body {
+    height: 100vh;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    background: #0a0a12;
+    user-select: none;
+    cursor: default;
+  }
+  input, textarea { user-select: text; }
+
+  .wallpaper {
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 20% 30%, rgba(88, 86, 214, 0.35), transparent 70%),
+      radial-gradient(ellipse 50% 45% at 80% 20%, rgba(255, 55, 95, 0.22), transparent 70%),
+      radial-gradient(ellipse 55% 55% at 70% 85%, rgba(50, 173, 230, 0.28), transparent 70%),
+      radial-gradient(ellipse 40% 40% at 30% 90%, rgba(100, 210, 255, 0.15), transparent 70%),
+      #0a0a12;
+  }
+
+  /* ============ boot ============ */
+  #boot {
+    position: fixed; inset: 0; z-index: 900;
+    background: #000;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 34px;
+    animation: bootOut .5s ease 2.4s forwards;
+  }
+  #boot .logo { font-size: 30px; font-weight: 600; letter-spacing: 10px; }
+  #boot .bar {
+    width: 170px; height: 5px; border-radius: 3px;
+    background: rgba(255,255,255,0.15); overflow: hidden;
+  }
+  #boot .bar i {
+    display: block; height: 100%; width: 40%;
+    background: #fff; border-radius: 3px;
+    animation: load 2.3s ease forwards;
+  }
+  @keyframes load { from { width: 4%; } to { width: 100%; } }
+  @keyframes bootOut { to { opacity: 0; visibility: hidden; } }
+
+  /* ============ menu bar ============ */
+  .menubar {
+    position: fixed; top: 0; left: 0; right: 0; height: 28px; z-index: 500;
+    display: flex; align-items: center;
+    padding: 0 12px; gap: 16px;
+    font-size: 13px;
+    background: rgba(20, 20, 30, 0.35);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .menubar .brand { font-weight: 700; cursor: pointer; }
+  .menubar .menus { display: flex; gap: 14px; opacity: 0.85; }
+  .menubar .spacer { flex: 1; }
+  .menubar .right { display: flex; gap: 14px; font-size: 12.5px; align-items: center; }
+
+  /* ============ dynamic island ============ */
+  .island {
+    position: fixed; top: 5px; left: 50%; transform: translateX(-50%);
+    z-index: 999999;
+    height: 28px; width: 168px;
+    background: #050507;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,.09);
+    box-shadow: 0 4px 22px rgba(0,0,0,.55);
+    overflow: hidden;
+    transition: width .45s cubic-bezier(.3,1.2,.3,1), height .45s cubic-bezier(.3,1.2,.3,1), border-radius .3s;
+    cursor: pointer;
+  }
+  .isl-face {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; gap: 4px;
+    padding: 0 12px;
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s;
+  }
+  .island[data-face="idle"]   { width: 168px; height: 28px; }
+  .island[data-face="toast"]  { width: 236px; height: 38px; border-radius: 22px; }
+  .island[data-face="player"] { width: 340px; height: 64px; border-radius: 24px; cursor: default; }
+  .island[data-face="idle"]   .isl-idle   { opacity: 1; pointer-events: auto; }
+  .island[data-face="toast"]  .isl-toast  { opacity: 1; pointer-events: auto; justify-content: center; }
+  .island[data-face="player"] .isl-player { opacity: 1; pointer-events: auto; }
+
+  .eq { display: flex; gap: 2.5px; align-items: flex-end; height: 14px; flex-shrink: 0; }
+  .eq i { width: 3px; border-radius: 2px; background: var(--accent); height: 30%; animation: eq 1s ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: .15s; animation-duration: .8s; }
+  .eq i:nth-child(3) { animation-delay: .3s;  animation-duration: 1.15s; }
+  .eq i:nth-child(4) { animation-delay: .1s;  animation-duration: .9s; }
+  @keyframes eq { 0%, 100% { height: 25%; } 50% { height: 95%; } }
+  .eq.off i { animation: none; height: 30%; opacity: .45; }
+
+  #islTrack { margin-left: 7px; font-size: 11.5px; opacity: .85; max-width: 95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ibtn { cursor: pointer; font-size: 13px; padding: 3px 5px; opacity: .9; }
+  .ibtn:hover { opacity: 1; }
+  .iclose { font-size: 11px; opacity: .5; }
+  .itt { flex: 1; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #islMsg { font-size: 12px; opacity: .9; max-width: 205px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .isl-prog {
+    position: absolute; left: 14px; right: 14px; bottom: 7px; height: 3px;
+    background: rgba(255,255,255,.15); border-radius: 2px;
+    opacity: 0; transition: opacity .3s;
+  }
+  .island[data-face="player"] .isl-prog { opacity: 1; }
+  .isl-prog i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 2px; }
+
+  /* ============ desktop ============ */
+  #desktop { position: fixed; inset: 28px 0 0 0; }
+
+  /* ============ windows ============ */
+  .win {
+    position: absolute;
+    min-width: 260px; min-height: 140px;
+    border-radius: 14px;
+    background: rgba(28, 28, 40, 0.55);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transition: box-shadow .2s, opacity .18s, transform .18s;
+  }
+  .win.focused { box-shadow: 0 18px 60px rgba(0,0,0,0.6); }
+  .win.focused .titlebar { background: rgba(255,255,255,0.07); }
+  .win.minimized { opacity: 0; transform: scale(.85) translateY(40px); pointer-events: none; }
+  .win.closing { opacity: 0; transform: scale(.9); }
+  .titlebar {
+    height: 38px; flex-shrink: 0;
+    display: flex; align-items: center;
+    padding: 0 12px; gap: 8px;
+    background: rgba(255,255,255,0.04);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    position: relative;
+  }
+  .dots { display: flex; gap: 7px; }
+  .dots span { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; transition: filter .15s; }
+  .dots span:hover { filter: brightness(1.25); }
+  .dots .close { background: #ff5f57; }
+  .dots .min { background: #febc2e; }
+  .dots .max { background: #28c840; }
+  .title { position: absolute; left: 0; right: 0; text-align: center; font-size: 13px; font-weight: 600; opacity: 0.9; pointer-events: none; }
+  .win-body { flex: 1; overflow: auto; padding: 14px; font-size: 14px; line-height: 1.55; }
+  .grip { position: absolute; right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; }
+
+  /* ============ dock ============ */
+  .dock {
+    position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 999998;
+    display: flex; align-items: flex-end; gap: 10px;
+    padding: 9px 12px;
+    border-radius: 22px;
+    background: rgba(30, 30, 45, 0.4);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid rgba(255,255,255,0.15);
+    box-shadow: 0 10px 35px rgba(0,0,0,0.5);
+  }
+  .dock .app {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    cursor: pointer;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    transition: transform .18s cubic-bezier(.2,.9,.3,1.4);
+    position: relative;
+  }
+  .dock .app:hover { transform: translateY(-9px) scale(1.18); }
+  .dock .app.running::after {
+    content: ""; position: absolute; bottom: -6px; left: 50%; margin-left: -2px;
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* ============ notes ============ */
+  #noteText {
+    width: 100%; height: 100%;
+    background: transparent; border: none; outline: none; resize: none;
+    color: var(--text);
+    font-family: inherit; font-size: 14px; line-height: 1.6;
+  }
+  .saved-tag { font-size: 11px; opacity: 0.6; text-align: right; margin-top: 6px; height: 14px; }
+
+  /* ============ terminal ============ */
+  .term {
+    height: 100%; display: flex; flex-direction: column;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+  }
+  .term-out { flex: 1; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; }
+  .term-line { display: flex; gap: 6px; align-items: center; }
+  .term-line .ps1 { color: var(--accent); white-space: nowrap; }
+  .term-line input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: var(--text); font: inherit;
+  }
+
+  /* ============ music ============ */
+  .music { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+  .music h2 { font-size: 18px; font-weight: 700; }
+  .music .artist { opacity: .6; font-size: 12px; }
+  .viz { width: 100%; height: 64px; border-radius: 10px; background: rgba(255,255,255,.04); }
+  .mprog { height: 5px; border-radius: 3px; background: rgba(255,255,255,.12); cursor: pointer; position: relative; }
+  .mprog i { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: var(--accent); border-radius: 3px; }
+  .mctl { display: flex; align-items: center; gap: 10px; }
+  .mctl .btn { cursor: pointer; font-size: 15px; padding: 4px 9px; border-radius: 8px; background: rgba(255,255,255,.06); }
+  .mctl .btn:hover { background: rgba(255,255,255,.14); }
+  .ptime { font-size: 11px; opacity: .6; margin-left: auto; }
+  .vol { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .vol input { flex: 1; accent-color: var(--accent); }
+  .tlist { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+  .trow { display: flex; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); cursor: pointer; font-size: 13px; align-items: center; border: 1px solid transparent; }
+  .trow:hover { background: rgba(255,255,255,.1); }
+  .trow.on { border-color: var(--accent); background: rgba(255,255,255,.08); }
+  .trow .num { opacity: .5; font-size: 11px; width: 14px; }
+  .trow .dur { margin-left: auto; opacity: .5; font-size: 11px; }
+
+  /* ============ links ============ */
+  .links { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .lcard {
+    display: flex; gap: 10px; align-items: center;
+    padding: 12px; border-radius: 12px;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
+    text-decoration: none; color: var(--text);
+    transition: transform .15s, background .15s;
+  }
+  .lcard:hover { transform: translateY(-3px); background: rgba(255,255,255,.12); }
+  .lcard .ic { font-size: 20px; }
+  .lcard b { font-size: 13px; display: block; }
+  .lcard .sub { font-size: 11px; opacity: .55; }
+
+  /* ============ settings ============ */
+  .set h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; opacity: .55; margin: 14px 0 8px; }
+  .set h3:first-child { margin-top: 0; }
+  .swatches { display: flex; gap: 10px; }
+  .swatch { width: 52px; height: 36px; border-radius: 9px; cursor: pointer; border: 2px solid transparent; }
+  .swatch.on { border-color: var(--accent); }
+  .dots-ac { display: flex; gap: 10px; }
+  .acdot { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+  .acdot.on { border-color: #fff; }
+  .set .danger { display: flex; gap: 8px; }
+  .set button {
+    font: inherit; font-size: 12.5px; color: var(--text);
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 8px; padding: 6px 10px; cursor: pointer;
+  }
+  .set button:hover { background: rgba(255,255,255,.16); }
+</style>
+</head>
+<body>
+
+  <div class="wallpaper" id="wall"></div>
+
+  <div id="boot">
+    <div class="logo">lumenOS</div>
+    <div class="bar"><i></i></div>
+  </div>
+
+  <div class="menubar">
+    <span class="brand" id="brand">&lt;/&gt; lumenOS</span>
+    <div class="menus">
+      <span>File</span><span>Edit</span><span>View</span><span>Help</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="right">
+      <span>visitor</span>
+      <span id="clock">--:--</span>
+    </div>
+  </div>
+
+  <div class="island" id="island" data-face="idle">
+    <div class="isl-face isl-idle">
+      <div class="eq" id="islEq"><i></i><i></i><i></i><i></i></div>
+      <span id="islTrack">lumenOS fm</span>
+    </div>
+    <div class="isl-face isl-player">
+      <span class="ibtn" id="iPrev">⏮</span>
+      <span class="ibtn" id="iPlay">▶</span>
+      <span class="ibtn" id="iNext">⏭</span>
+      <span class="itt" id="iTitle">lumenOS fm</span>
+      <span class="ibtn iclose" id="iClose">✕</span>
+    </div>
+    <div class="isl-prog"><i id="iProg"></i></div>
+    <div class="isl-face isl-toast"><span id="islMsg"></span></div>
+  </div>
+
+  <div id="desktop"></div>
+
+  <div class="dock" id="dock"></div>
+
+<script>
+  /* ================= state ================= */
+  const desktop = document.getElementById('desktop');
+  const wallEl = document.getElementById('wall');
+  let zCounter = 10;
+  const openWins = {};
+
+  /* ================= clock ================= */
+  function tick() {
+    const d = new Date();
+    document.getElementById('clock').textContent =
+      d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  tick(); setInterval(tick, 5000);
+
+  /* ================= dynamic island ================= */
+  const island = document.getElementById('island');
+  let islandPinned = false, toastT = null;
+
+  function islandToast(msg) {
+    document.getElementById('islMsg').textContent = msg;
+    island.dataset.face = 'toast';
+    clearTimeout(toastT);
+    toastT = setTimeout(() => {
+      toastT = null;
+      island.dataset.face = islandPinned ? 'player' : 'idle';
+      refreshIsland();
+    }, 2000);
+  }
+
+  function setPinned(p) {
+    islandPinned = p;
+    island.dataset.face = p ? 'player' : 'idle';
+    refreshIsland();
+  }
+
+  function refreshIsland() {
+    const hasTrack = playing || elapsedBase > 0;
+    document.getElementById('islEq').classList.toggle('off', !playing);
+    const label = hasTrack ? TRACKS[curTrack].name : 'lumenOS fm';
+    document.getElementById('islTrack').textContent = label;
+    document.getElementById('iTitle').textContent = label;
+    document.getElementById('iPlay').textContent = playing ? '⏸' : '▶';
+    const tr = TRACKS[curTrack];
+    const pct = Math.min(100, elapsed() / tr.dur * 100);
+    document.getElementById('iProg').style.width = pct + '%';
+  }
+
+  island.addEventListener('click', () => {
+    if (island.dataset.face !== 'player') setPinned(true);
+  });
+  document.getElementById('iClose').addEventListener('click', (e) => {
+    e.stopPropagation();
+    setPinned(false);
+  });
+  document.getElementById('iPlay').addEventListener('click', (e) => {
+    e.stopPropagation();
+    playing ? pauseMusic() : (AC ? resumeMusic() : playMusic(curTrack));
+  });
+  document.getElementById('iNext').addEventListener('click', (e) => {
+    e.stopPropagation();
+    playMusic((curTrack + 1) % TRACKS.length);
+    islandToast('now playing — ' + TRACKS[curTrack].name);
+  });
+  document.getElementById('iPrev').addEventListener('click', (e) => {
+    e.stopPropagation();
+    playMusic((curTrack + TRACKS.length - 1) % TRACKS.length);
+    islandToast('now playing — ' + TRACKS[curTrack].name);
+  });
+
+  /* ================= music engine (all synthesized, no files) ================= */
+  const TRACKS = [
+    { name: 'midnight drive',   artist: 'lumen waves',        bpm: 74, prog: [[57,60,64,67],[53,57,60,64],[55,59,62,65],[52,55,59,62]] },
+    { name: 'rain on glass',    artist: 'pillow static',      bpm: 62, prog: [[55,58,62,65],[50,53,57,60],[52,55,58,62],[57,60,64,67]] },
+    { name: 'capybara groove',  artist: 'hot spring quartet', bpm: 84, prog: [[52,56,59,62],[57,60,64,67],[50,54,57,60],[55,59,62,66]] },
+  ];
+  TRACKS.forEach(t => { t.barDur = 240 / t.bpm; t.dur = t.barDur * 8; });
+
+  let AC = null, master, analyser, vinylGain;
+  let playing = false, curTrack = 0, barTimer = null, elapsedBase = 0, startStamp = 0;
+
+  function ensureAudio() {
+    if (AC) return;
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = 0.55;
+    analyser = AC.createAnalyser(); analyser.fftSize = 128;
+    master.connect(analyser); analyser.connect(AC.destination);
+    // vinyl hiss: looped noise through a lowpass
+    const len = AC.sampleRate * 2;
+    const buf = AC.createBuffer(1, len, AC.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.4;
+    const src = AC.createBufferSource(); src.buffer = buf; src.loop = true;
+    const filt = AC.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 2600;
+    vinylGain = AC.createGain(); vinylGain.gain.value = 0;
+    src.connect(filt); filt.connect(vinylGain); vinylGain.connect(master);
+    src.start();
+  }
+
+  const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+  function pluck(freq, t, dur, vol, type) {
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+
+  function playBar(track, bar) {
+    const t = AC.currentTime + 0.03;
+    const chord = track.prog[bar % track.prog.length];
+    chord.forEach(n => pluck(mtof(n), t, track.barDur * 1.9, 0.05, 'triangle'));
+    pluck(mtof(chord[0] - 24), t, track.barDur * 0.95, 0.09, 'sine');
+    if (Math.random() < 0.7) {
+      const scale = [0, 2, 3, 5, 7, 10];
+      pluck(mtof(chord[0] + 12 + scale[Math.floor(Math.random() * scale.length)]),
+        t + Math.random() * track.barDur * 0.6, 0.9, 0.045, 'sine');
+    }
+  }
+
+  function playMusic(i) {
+    ensureAudio();
+    if (AC.state === 'suspended') AC.resume();
+    clearInterval(barTimer);
+    curTrack = i;
+    elapsedBase = 0; startStamp = AC.currentTime;
+    playing = true;
+    vinylGain.gain.setTargetAtTime(0.05, AC.currentTime, 0.4);
+    let bar = 0;
+    playBar(TRACKS[i], bar++);
+    barTimer = setInterval(() => playBar(TRACKS[curTrack], bar++), TRACKS[curTrack].barDur * 1000);
+    refreshMusicUI(); refreshIsland();
+  }
+
+  function resumeMusic() {
+    if (AC.state === 'suspended') AC.resume();
+    playing = true; startStamp = AC.currentTime;
+    vinylGain.gain.setTargetAtTime(0.05, AC.currentTime, 0.4);
+    let bar = Math.floor(elapsedBase / TRACKS[curTrack].barDur);
+    clearInterval(barTimer);
+    barTimer = setInterval(() => playBar(TRACKS[curTrack], bar++), TRACKS[curTrack].barDur * 1000);
+    refreshMusicUI(); refreshIsland();
+  }
+
+  function pauseMusic() {
+    elapsedBase += AC.currentTime - startStamp;
+    clearInterval(barTimer); barTimer = null;
+    vinylGain.gain.setTargetAtTime(0, AC.currentTime, 0.2);
+    playing = false;
+    refreshMusicUI(); refreshIsland();
+  }
+
+  const elapsed = () => playing ? elapsedBase + (AC.currentTime - startStamp) : elapsedBase;
+
+  setInterval(() => {
+    if (!AC) return;
+    const tr = TRACKS[curTrack], e = elapsed();
+    if (playing && e >= tr.dur) {
+      playMusic((curTrack + 1) % TRACKS.length);
+      islandToast('now playing — ' + tr.name);
+    }
+    const pct = Math.min(100, e / tr.dur * 100);
+    const mp = document.getElementById('mProgFill');
+    if (mp) mp.style.width = pct + '%';
+    const tm = document.getElementById('mTime');
+    if (tm) tm.textContent = fmt(e) + ' / ' + fmt(tr.dur);
+    const ip = document.getElementById('iProg');
+    if (ip) ip.style.width = pct + '%';
+  }, 250);
+
+  const fmt = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+
+  function refreshMusicUI() {
+    const tr = TRACKS[curTrack];
+    const t = document.getElementById('mTitle');
+    if (t) t.textContent = tr.name;
+    const a = document.getElementById('mArtist');
+    if (a) a.textContent = tr.artist;
+    const p = document.getElementById('mPlay');
+    if (p) p.textContent = playing ? '⏸' : '▶';
+    document.querySelectorAll('.trow').forEach((r, i) => r.classList.toggle('on', i === curTrack));
+  }
+
+  /* ================= window manager ================= */
+  function createWindow(app) {
+    if (openWins[app.id]) { focusWin(openWins[app.id]); return; }
+
+    const w = document.createElement('div');
+    w.className = 'win';
+    w.dataset.app = app.id;
+    w.style.left = (app.x != null ? app.x : 80 + Math.random() * 160) + 'px';
+    w.style.top  = (app.y != null ? app.y : 60 + Math.random() * 100) + 'px';
+    w.style.width = (app.w || 420) + 'px';
+    if (app.h) w.style.height = app.h + 'px';
+
+    w.innerHTML = `
+      <div class="titlebar">
+        <div class="dots">
+          <span class="close"></span><span class="min"></span><span class="max"></span>
+        </div>
+        <div class="title">${app.name}</div>
+      </div>
+      <div class="win-body"></div>
+      <div class="grip"></div>`;
+    desktop.appendChild(w);
+    openWins[app.id] = w;
+
+    app.render(w.querySelector('.win-body'), w);
+
+    const bar = w.querySelector('.titlebar');
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.dots')) return;
+      focusWin(w);
+      startDrag(w, bar, e);
+    });
+    w.addEventListener('pointerdown', () => focusWin(w));
+
+    w.querySelector('.close').addEventListener('click', () => closeWin(w));
+    w.querySelector('.min').addEventListener('click', () => minimizeWin(w));
+    w.querySelector('.max').addEventListener('click', () => toggleMax(w));
+    w.querySelector('.grip').addEventListener('pointerdown', (e) => startResize(w, e));
+
+    focusWin(w);
+    updateDock();
+    return w;
+  }
+
+  function closeWin(w) {
+    w.classList.add('closing');
+    setTimeout(() => {
+      delete openWins[w.dataset.app];
+      w.remove();
+      updateDock();
+    }, 180);
+  }
+
+  function minimizeWin(w) {
+    w.classList.add('minimized');
+    w.dataset.min = '1';
+    updateDock();
+  }
+
+  function restoreWin(w) {
+    w.classList.remove('minimized');
+    delete w.dataset.min;
+    focusWin(w);
+    updateDock();
+  }
+
+  function toggleMax(w) {
+    if (w.dataset.maxed) {
+      w.style.left = w.dataset.px; w.style.top = w.dataset.py;
+      w.style.width = w.dataset.pw; w.style.height = w.dataset.ph;
+      delete w.dataset.maxed;
+    } else {
+      w.dataset.px = w.style.left; w.dataset.py = w.style.top;
+      w.dataset.pw = w.style.width; w.dataset.ph = w.style.height || '';
+      w.style.left = '6px'; w.style.top = '6px';
+      w.style.width = (desktop.clientWidth - 12) + 'px';
+      w.style.height = (desktop.clientHeight - 12) + 'px';
+      w.dataset.maxed = '1';
+    }
+  }
+
+  function focusWin(w) {
+    document.querySelectorAll('.win').forEach(x => x.classList.remove('focused'));
+    w.classList.add('focused');
+    w.style.zIndex = ++zCounter;
+  }
+
+  function startDrag(w, bar, e) {
+    const dx = e.clientX - w.offsetLeft;
+    const dy = e.clientY - w.offsetTop;
+    bar.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const x = Math.min(Math.max(ev.clientX - dx, -w.offsetWidth + 90), desktop.clientWidth - 60);
+      const y = Math.min(Math.max(ev.clientY - dy, 0), desktop.clientHeight - 40);
+      w.style.left = x + 'px';
+      w.style.top = y + 'px';
+    };
+    const up = () => {
+      bar.removeEventListener('pointermove', move);
+      bar.removeEventListener('pointerup', up);
+      bar.removeEventListener('pointercancel', up);
+    };
+    bar.addEventListener('pointermove', move);
+    bar.addEventListener('pointerup', up);
+    bar.addEventListener('pointercancel', up);
+  }
+
+  function startResize(w, e) {
+    e.preventDefault();
+    const sw = w.offsetWidth, sh = w.offsetHeight;
+    const sx = e.clientX, sy = e.clientY;
+    const grip = e.currentTarget;
+    grip.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      w.style.width  = Math.max(260, sw + ev.clientX - sx) + 'px';
+      w.style.height = Math.max(140, sh + ev.clientY - sy) + 'px';
+    };
+    const up = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+  }
+
+  /* ================= apps ================= */
+  const apps = [
+    {
+      id: 'about', name: 'about.txt', icon: '👋', w: 460, x: 140, y: 70,
+      render(body) {
+        body.innerHTML = `
+          <p><b>hi, i'm zufii 👋</b></p>
+          <p style="margin-top:10px">this is my personal operating system. it lives in a
+          browser tab and it's made of one html file — the windows, the dock, the
+          dynamic island, even the music, all hand-rolled.</p>
+          <p style="margin-top:10px">things i like: lo-fi playlists, late night coding,
+          and capybaras.</p>
+          <p style="margin-top:10px; opacity:.65">poking the island up top is highly
+          recommended. the terminal knows a few tricks too — try <b>help</b>.</p>`;
+      }
+    },
+    {
+      id: 'notes', name: 'notes', icon: '📝', w: 430, h: 320,
+      render(body) {
+        body.style.display = 'flex';
+        body.style.flexDirection = 'column';
+        body.innerHTML = `
+          <textarea id="noteText" placeholder="type something..."></textarea>
+          <div class="saved-tag">autosaves as you type</div>`;
+        const ta = body.querySelector('textarea');
+        const tag = body.querySelector('.saved-tag');
+        ta.value = localStorage.getItem('lumen-note') || '';
+        let t;
+        ta.addEventListener('input', () => {
+          localStorage.setItem('lumen-note', ta.value);
+          tag.textContent = 'saving...';
+          clearTimeout(t);
+          t = setTimeout(() => { tag.textContent = 'saved ✓'; islandToast('note saved ✓'); }, 400);
+        });
+      }
+    },
+    {
+      id: 'terminal', name: 'terminal', icon: '⌨️', w: 500, h: 300,
+      render(body) {
+        body.style.padding = '10px 12px';
+        body.innerHTML = `
+          <div class="term">
+            <div class="term-out"></div>
+            <div class="term-line">
+              <span class="ps1">visitor@lumenos:~$</span>
+              <input autocomplete="off" spellcheck="false">
+            </div>
+          </div>`;
+        const out = body.querySelector('.term-out');
+        const input = body.querySelector('input');
+        const print = (s) => { out.textContent += s + '\n'; out.scrollTop = out.scrollHeight; };
+
+        print('lumenOS shell — type "help" for commands');
+        body.addEventListener('pointerup', () => {
+          if (!getSelection().toString()) input.focus();
+        });
+        setTimeout(() => input.focus(), 50);
+
+        const commands = {
+          help: () => print('commands: help, whoami, date, echo, ls, open, clear, neofetch, credits'),
+          whoami: () => print('visitor'),
+          date: () => print(new Date().toString()),
+          echo: (a) => print(a.join(' ')),
+          ls: () => print('about.txt   notes.txt   secrets/   (nothing interesting, promise)'),
+          open: (a) => {
+            const app = apps.find(x => x.id === a[0]);
+            if (app) { createWindow(app); print('opening ' + a[0] + '...'); }
+            else print('usage: open <about|notes|terminal|music|links|settings>');
+          },
+          clear: () => { out.textContent = ''; },
+          credits: () => print('lumenOS 1.0 — built by hand, one div at a time'),
+          neofetch: () => print(
+`      .-.        visitor@lumenos
+     (o o)       --------------
+     | O \\       os: lumenOS 1.0 (web)
+      \\__/       shell: lsh 1.0
+                 wm: glass.js
+                 memory: 1 html file`),
+        };
+
+        input.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          const parts = input.value.trim().split(/\s+/);
+          input.value = '';
+          if (!parts[0]) return;
+          print('visitor@lumenos:~$ ' + parts.join(' '));
+          islandToast('$ ' + parts.join(' '));
+          const cmd = commands[parts[0].toLowerCase()];
+          if (cmd) cmd(parts.slice(1));
+          else print(`lsh: command not found: ${parts[0]} (try "help")`);
+        });
+      }
+    },
+    {
+      id: 'music', name: 'music', icon: '🎵', w: 420, h: 460,
+      render(body) {
+        body.innerHTML = `
+          <div class="music">
+            <div>
+              <h2 id="mTitle">—</h2>
+              <div class="artist" id="mArtist"></div>
+            </div>
+            <canvas id="viz" class="viz" width="380" height="64"></canvas>
+            <div class="mprog" id="mProg"><i id="mProgFill"></i></div>
+            <div class="mctl">
+              <span class="btn" id="mPrev">⏮</span>
+              <span class="btn" id="mPlay">▶</span>
+              <span class="btn" id="mNext">⏭</span>
+              <span class="ptime" id="mTime">0:00 / 0:00</span>
+            </div>
+            <div class="vol">🔈 <input type="range" id="mVol" min="0" max="100" value="55"></div>
+            <div class="tlist" id="mList"></div>
+          </div>`;
+
+        const list = body.querySelector('#mList');
+        TRACKS.forEach((t, i) => {
+          const row = document.createElement('div');
+          row.className = 'trow' + (i === curTrack ? ' on' : '');
+          row.innerHTML = `<span class="num">${i + 1}</span><span>${t.name}</span><span class="dur">${t.artist}</span>`;
+          row.addEventListener('click', () => {
+            playMusic(i);
+            islandToast('now playing — ' + t.name);
+          });
+          list.appendChild(row);
+        });
+
+        body.querySelector('#mPlay').addEventListener('click', () => {
+          if (playing) pauseMusic();
+          else if (AC) resumeMusic();
+          else { playMusic(curTrack); islandToast('now playing — ' + TRACKS[curTrack].name); }
+        });
+        body.querySelector('#mNext').addEventListener('click', () => playMusic((curTrack + 1) % TRACKS.length));
+        body.querySelector('#mPrev').addEventListener('click', () => playMusic((curTrack + TRACKS.length - 1) % TRACKS.length));
+
+        body.querySelector('#mProg').addEventListener('click', (e) => {
+          if (!AC) return;
+          const r = e.currentTarget.getBoundingClientRect();
+          elapsedBase = Math.min(0.99, (e.clientX - r.left) / r.width) * TRACKS[curTrack].dur;
+          if (playing) startStamp = AC.currentTime;
+          refreshMusicUI();
+        });
+
+        body.querySelector('#mVol').addEventListener('input', (e) => {
+          if (master) master.gain.value = e.target.value / 100 * 0.9;
+        });
+
+        refreshMusicUI();
+        startViz();
+      }
+    },
+    {
+      id: 'links', name: 'links', icon: '🔗', w: 400,
+      render(body) {
+        const data = [
+          { ic: '🎧', name: 'lo-fi radio', sub: 'beats to code to', url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk' },
+          { ic: '🐙', name: 'github',      sub: 'where the code lives', url: 'https://github.com' },
+          { ic: '🦫', name: 'capybaras',   sub: 'important research', url: 'https://en.wikipedia.org/wiki/Capybara' },
+          { ic: '📚', name: 'mdn',         sub: 'my second brain', url: 'https://developer.mozilla.org' },
+        ];
+        body.innerHTML = `<div class="links">${data.map(l =>
+          `<a class="lcard" href="${l.url}" target="_blank" rel="noopener">
+             <span class="ic">${l.ic}</span>
+             <span><b>${l.name}</b><span class="sub">${l.sub}</span></span>
+           </a>`).join('')}</div>`;
+      }
+    },
+    {
+      id: 'settings', name: 'settings', icon: '⚙️', w: 380, h: 360,
+      render(body) {
+        body.innerHTML = `
+          <div class="set">
+            <h3>wallpaper</h3>
+            <div class="swatches" id="wallSw"></div>
+            <h3>accent</h3>
+            <div class="dots-ac" id="accSw"></div>
+            <h3>danger zone</h3>
+            <div class="danger">
+              <button id="resetNotes">clear notes</button>
+              <button id="factory">factory reset</button>
+            </div>
+            <p style="margin-top:12px;font-size:11px;opacity:.5">everything is stored in your
+            browser only. no accounts, no passwords.</p>
+          </div>`;
+
+        const ws = body.querySelector('#wallSw');
+        Object.keys(WALLS).forEach(key => {
+          const s = document.createElement('div');
+          s.className = 'swatch' + (key === curWall ? ' on' : '');
+          s.style.background = WALLS[key];
+          s.title = key;
+          s.addEventListener('click', () => setWall(key));
+          ws.appendChild(s);
+        });
+
+        const as = body.querySelector('#accSw');
+        Object.entries(ACCENTS).forEach(([key, color]) => {
+          const s = document.createElement('div');
+          s.className = 'acdot' + (key === curAccent ? ' on' : '');
+          s.style.background = color;
+          s.title = key;
+          s.addEventListener('click', () => setAccent(key));
+          as.appendChild(s);
+        });
+
+        body.querySelector('#resetNotes').addEventListener('click', () => {
+          localStorage.removeItem('lumen-note');
+          const ta = document.querySelector('#noteText');
+          if (ta) ta.value = '';
+          islandToast('notes cleared');
+        });
+        body.querySelector('#factory').addEventListener('click', () => {
+          localStorage.clear();
+          location.reload();
+        });
+      }
+    }
+  ];
+
+  /* ================= visualizer ================= */
+  let vizRAF = null;
+  function startViz() {
+    if (vizRAF) return;
+    const loop = () => {
+      vizRAF = requestAnimationFrame(loop);
+      const c = document.getElementById('viz');
+      if (!c) { vizRAF = null; return; }
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, c.width, c.height);
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#30d158';
+      const n = 28;
+      let arr = null;
+      if (analyser && playing) {
+        arr = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(arr);
+      }
+      for (let i = 0; i < n; i++) {
+        const v = arr ? arr[Math.floor(i * arr.length / n)] / 255 : 0.06;
+        const h = Math.max(3, v * (c.height - 8));
+        const x = 8 + i * ((c.width - 16) / n);
+        const bw = ((c.width - 16) / n) * 0.55;
+        ctx.fillStyle = accent;
+        ctx.globalAlpha = 0.35 + v * 0.65;
+        ctx.beginPath();
+        ctx.roundRect(x, c.height - 4 - h, bw, h, 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    };
+    loop();
+  }
+
+  /* ================= dock ================= */
+  const dock = document.getElementById('dock');
+  apps.forEach((app) => {
+    const el = document.createElement('div');
+    el.className = 'app';
+    el.dataset.app = app.id;
+    el.textContent = app.icon;
+    el.addEventListener('click', () => {
+      const w = openWins[app.id];
+      if (!w) createWindow(app);
+      else if (w.dataset.min) restoreWin(w);
+      else focusWin(w);
+    });
+    dock.appendChild(el);
+  });
+
+  function updateDock() {
+    document.querySelectorAll('.dock .app').forEach(el => {
+      const w = openWins[el.dataset.app];
+      el.classList.toggle('running', !!w && !w.dataset.min);
+    });
+  }
+
+  document.getElementById('brand').addEventListener('click', () => createWindow(apps[0]));
+
+  /* ================= themes ================= */
+  const WALLS = {
+    aurora: 'radial-gradient(ellipse 60% 50% at 20% 30%, rgba(88,86,214,.35), transparent 70%), radial-gradient(ellipse 50% 45% at 80% 20%, rgba(255,55,95,.22), transparent 70%), radial-gradient(ellipse 55% 55% at 70% 85%, rgba(50,173,230,.28), transparent 70%), radial-gradient(ellipse 40% 40% at 30% 90%, rgba(100,210,255,.15), transparent 70%), #0a0a12',
+    sunset: 'radial-gradient(ellipse 60% 50% at 25% 25%, rgba(255,95,109,.35), transparent 70%), radial-gradient(ellipse 55% 45% at 80% 30%, rgba(255,189,46,.25), transparent 70%), radial-gradient(ellipse 60% 55% at 65% 90%, rgba(191,90,242,.3), transparent 70%), radial-gradient(ellipse 40% 40% at 20% 85%, rgba(255,55,95,.18), transparent 70%), #120a12',
+    midnight: 'radial-gradient(ellipse 55% 45% at 30% 25%, rgba(10,132,255,.22), transparent 70%), radial-gradient(ellipse 50% 45% at 75% 40%, rgba(94,92,230,.2), transparent 70%), radial-gradient(ellipse 60% 50% at 60% 90%, rgba(100,210,255,.14), transparent 70%), #05070d',
+    mint: 'radial-gradient(ellipse 55% 50% at 25% 30%, rgba(48,209,88,.22), transparent 70%), radial-gradient(ellipse 50% 45% at 78% 22%, rgba(100,210,255,.2), transparent 70%), radial-gradient(ellipse 60% 55% at 65% 88%, rgba(48,209,88,.14), transparent 70%), #071010',
+  };
+  const ACCENTS = { green: '#30d158', pink: '#ff375f', sky: '#64d2ff', orange: '#ff9f0a' };
+  let curWall = localStorage.getItem('lumen-wall') || 'aurora';
+  let curAccent = localStorage.getItem('lumen-accent') || 'green';
+
+  function setWall(key) {
+    curWall = key;
+    localStorage.setItem('lumen-wall', key);
+    wallEl.style.background = WALLS[key];
+    document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('on', s.title === key));
+    islandToast('wallpaper: ' + key);
+  }
+
+  function setAccent(key) {
+    curAccent = key;
+    localStorage.setItem('lumen-accent', key);
+    document.documentElement.style.setProperty('--accent', ACCENTS[key]);
+    document.querySelectorAll('.acdot').forEach(s => s.classList.toggle('on', s.title === key));
+    islandToast('accent: ' + key);
+  }
+
+  wallEl.style.background = WALLS[curWall];
+  document.documentElement.style.setProperty('--accent', ACCENTS[curAccent]);
+
+  /* ================= deep link ================= */
+  // about me opens on boot (deep link can override)
+  const wanted = location.hash.match(/open=([\w,]+)/);
+  if (wanted) wanted[1].split(',').forEach(id => {
+    const app = apps.find(a => a.id === id);
+    if (app) setTimeout(() => createWindow(app), 300);
+  });
+  else setTimeout(() => createWindow(apps[0]), 300);
+  if (location.hash.includes('island=player')) setTimeout(() => setPinned(true), 900);
+
+  /* ================= welcome ================= */
+  setTimeout(() => islandToast('welcome to lumenOS ✨'), 3100);
+</script>
+</body>
+</html> 
